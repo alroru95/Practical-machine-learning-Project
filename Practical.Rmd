@@ -1,0 +1,103 @@
+---
+title: "Prediction Assignmet WriteUp"
+author: "A. Rodríguez"
+date: "08/11/2020"
+output: html_document
+---
+
+#Acknowledgements
+
+Both the training and datasets were downloaded from http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. They were extracted from: "Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements".
+Thanks for letting this data being used on my assignment.
+
+#Overview
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit make possible to collect a large amount of inexpensive data about personal activity relatively. These types of devices are part of the quantified self movement. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, we'll use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal will be to predict the manner ("classe") in which they did the exercise.
+
+#Loading and cleaning data
+
+First, we need to download the training and testing datasets and assign them to their variables with the same name.
+
+```{r load}
+URL_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+URL_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(URL_train, "./Train.csv", method = "curl")
+download.file(URL_test, "./Test.csv", method = "curl")
+Train <- read.csv("./Train.csv", header = TRUE, sep = ",")
+Test <- read.csv("./Test.csv", header = TRUE, sep = ",")
+```
+
+When having a look at both dataset, we see that both contain a lot of NA values, so we need to filter them. Columns containing at least one NA values will be removed. The first 7 columns will be removed as well, as they are irrelevant for the project.
+
+```{r clean}
+Pure_train <- Train[,colSums(is.na(Train)) == 0]; Valid_train <- Pure_train[,-c(1:7)]
+Pure_test <- Test[,colSums(is.na(Test)) == 0]; Valid_test <- Pure_test[,-c(1:7)]
+```
+
+#Model build
+
+##Data partition
+
+The filtered training dataset will be split into training (70%) and testing (30%). The testing dataset will be renamed. The near-zero-variance variables will be eliminated, as their impact on classe isn't that important.
+
+```{r partition}
+library(caret)
+set.seed(155)
+inTrain <- createDataPartition(Valid_train$classe, p=0.7, list = FALSE)
+Training <- Valid_train[inTrain,]; Training <- Training[,-nearZeroVar(Training)]
+Testing <- Valid_train[-inTrain,]; Testing <- Testing[,-nearZeroVar(Testing)]
+Validation <- Valid_test
+```
+
+##Model building
+
+As we are doing this assignment from scratch, we don't know which model is the best one to simulate the "classe" results. Therefore, we'll perform three different types of models: Support Vector Machines, Random Forests, and Generalized Boosted Model.
+
+###Support Vector Machine
+
+```{r svm}
+library(e1071)
+set.seed(3395)
+fit_svm <- svm(classe~., data = Training)
+svm_pred <- predict(fit_svm, Testing)
+Matrix_svm <- confusionMatrix(svm_pred, Testing$classe)
+Matrix_svm$table
+Matrix_svm$overall
+```
+
+The accuracy of this model is quite high (about 94%), and by looking at the table we can see that values predicted in the correct classe outnumber the ones in wrong classes by at least one order of magnitude.
+
+###Random Forest
+
+```{r random forests}
+set.seed(3395)
+fit_rf <- train(classe~., data = Training, method="rf") ##Takes a lot
+rf_pred <- predict(fit_rf, Testing)
+Matrix_rf <- confusionMatrix(rf_pred, Testing$classe)
+Matrix_rf$table
+Matrix_rf$overall
+```
+
+The accuracy of the random forest method is almost perfect (99.4% concretely), which is easily recocognized on the table, with just a bit of inaccuracy distinguishing classes "C" and "D". Other than that, the vast majority of values are correctly classified.
+
+###Generalized Boosted Model
+
+```{r gbm}
+set.seed(3395)
+fit_gbm <- train(classe~., Training, method="gbm", verbose=FALSE)
+gbm_pred <- predict(fit_gbm, Testing)
+Matrix_gbm <- confusionMatrix(gbm_pred, Testing$classe)
+Matrix_gbm$table
+Matrix_gbm$overall
+```
+
+In the case of the gbm method, the accuracy is in an intermediate spot between the other ones (about 96.1%). Although the classes are overwhelmingly well classified, we can see that the wrong ones are more spread through the table, while in the other methods the mistakes where in the adjacent classes.
+
+#Model selection and test prediction
+
+Due to having the highest accuracy, the random forest method will be the chosen one to predict the quiz. However, we could well use the Generalized Boosted Method, since the accuracy is ~96%, and the risk is that we would fail to predict one of the cases.
+
+```{r prediction}
+Prediction_quiz <- predict(fit_rf, Validation)
+Prediction_quiz
+```
